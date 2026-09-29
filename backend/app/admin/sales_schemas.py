@@ -28,7 +28,14 @@ class SaleCreate(BaseModel):
         default=Decimal("0.00"),
         ge=0,
     )
+class SaleReturnItemCreate(BaseModel):
+    sale_item_id: int
+    quantity: int = Field(gt=0)
 
+
+class SaleReturnCreate(BaseModel):
+    items: list[SaleReturnItemCreate] = Field(min_length=1)
+    reason: str | None = Field(default=None, max_length=255)
 
 class SaleItemRead(BaseModel):
     id: int

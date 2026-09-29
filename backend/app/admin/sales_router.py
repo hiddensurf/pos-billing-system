@@ -7,6 +7,7 @@ from app.admin.sales_schemas import (
     SaleCreate,
     SaleItemRead,
     SaleRead,
+    SaleReturnCreate,
 )
 from app.auth.dependencies import get_current_user
 from app.db import get_session
@@ -15,6 +16,8 @@ from app.models.models import (
     Product,
     Sale,
     SaleItem,
+    SaleReturn,
+    SaleReturnItem,
     StockMovement,
     User,
 )
@@ -376,3 +379,231 @@ def get_sale(
             for item in items
         ],
     )
+@router.post(
+    "/{sale_id}/returns",
+    status_code=status.HTTP_201_CREATED,
+)
+def create_sale_return(
+    sale_id: int,
+    return_data: SaleReturnCreate,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+):
+    if current_user.role not in {"admin", "staff"}:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Insufficient permissions",
+        )
+
+    if not current_user.is_active:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Inactive user",
+        )
+
+    sale = session.get(Sale, sale_id)
+
+    if sale is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Sale not found",
+        )
+
+    if sale.status in {"cancelled", "returned"}:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Sale is not eligible for return",
+        )
+
+    if (
+        current_user.role == "staff"
+        and sale.staff_id != current_user.id
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="You can only process returns for your own sales",
+        )
+
+    sale_items = session.exec(
+        select(SaleItem).where(
+            SaleItem.sale_id == sale.id
+        )
+    ).all()
+
+    sale_items_by_id = {
+        item.id: item
+        for item in sale_items
+    }
+
+    prepared_items = []
+    refund_amount = Decimal("0.00")
+
+    for return_item in return_data.items:
+        sale_item = sale_items_by_id.get(return_item.sale_item_id)
+
+        if sale_item is None:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=(
+                    f"Sale item {return_item.sale_item_id} "
+                    f"not found in sale"
+                ),
+            )
+
+        previous_returns = session.exec(
+            select(SaleReturnItem).where(
+                SaleReturnItem.sale_item_id == sale_item.id
+            )
+        ).all()
+
+        returned_quantity = sum(
+            item.quantity
+            for item in previous_returns
+        )
+
+        remaining_quantity = (
+            sale_item.quantity - returned_quantity
+        )
+
+        if return_item.quantity > remaining_quantity:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail=(
+                    f"Cannot return {return_item.quantity} units "
+                    f"of sale item {sale_item.id}. "
+                    f"Remaining returnable quantity: "
+                    f"{remaining_quantity}"
+                ),
+            )
+
+        item_refund = (
+            sale_item.unit_price * return_item.quantity
+        )
+
+        if sale_item.quantity > 0:
+            item_discount = (
+                sale_item.discount
+                * Decimal(return_item.quantity)
+                / Decimal(sale_item.quantity)
+            )
+        else:
+            item_discount = Decimal("0.00")
+
+        item_refund -= item_discount
+
+        prepared_items.append(
+            (
+                return_item,
+                sale_item,
+                item_refund,
+            )
+        )
+
+        refund_amount += item_refund
+
+    if refund_amount <= 0:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Refund amount must be greater than zero",
+        )
+
+    sale_return = SaleReturn(
+        sale_id=sale.id,
+        processed_by=current_user.id,
+        refund_amount=refund_amount,
+        reason=return_data.reason,
+        status="completed",
+    )
+
+    session.add(sale_return)
+    session.flush()
+
+    for return_item, sale_item, item_refund in prepared_items:
+        product = session.get(
+            Product,
+            sale_item.product_id,
+        )
+
+        if product is None:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=(
+                    f"Product {sale_item.product_id} not found"
+                ),
+            )
+
+        stock_before = product.stock_quantity
+        stock_after = (
+            stock_before + return_item.quantity
+        )
+
+        product.stock_quantity = stock_after
+
+        return_item_record = SaleReturnItem(
+            sale_return_id=sale_return.id,
+            sale_item_id=sale_item.id,
+            product_id=product.id,
+            quantity=return_item.quantity,
+            unit_price=sale_item.unit_price,
+            refund_amount=item_refund,
+        )
+
+        movement = StockMovement(
+            product_id=product.id,
+            movement_type="RETURN",
+            quantity=return_item.quantity,
+            stock_before=stock_before,
+            stock_after=stock_after,
+            reference_type="SALE_RETURN",
+            reference_id=sale_return.id,
+            created_by=current_user.id,
+        )
+
+        session.add(product)
+        session.add(return_item_record)
+        session.add(movement)
+
+    total_returned_quantity = 0
+    total_sale_quantity = 0
+
+    for sale_item in sale_items:
+        previous_returns = session.exec(
+            select(SaleReturnItem).where(
+                SaleReturnItem.sale_item_id == sale_item.id
+            )
+        ).all()
+
+        total_returned_quantity += (
+            sum(item.quantity for item in previous_returns)
+        )
+        total_sale_quantity += sale_item.quantity
+
+    if total_returned_quantity >= total_sale_quantity:
+        sale.status = "returned"
+    else:
+        sale.status = "partially_returned"
+
+    ledger_entry = LedgerEntry(
+        entry_type="SALE_RETURN",
+        amount=refund_amount,
+        direction="OUT",
+        reference_type="SALE_RETURN",
+        reference_id=sale_return.id,
+        description=f"Return for sale {sale.bill_number}",
+        created_by=current_user.id,
+    )
+
+    session.add(sale)
+    session.add(ledger_entry)
+
+    session.commit()
+    session.refresh(sale_return)
+
+    return {
+        "id": sale_return.id,
+        "sale_id": sale_return.sale_id,
+        "refund_amount": sale_return.refund_amount,
+        "reason": sale_return.reason,
+        "status": sale_return.status,
+        "created_at": sale_return.created_at,
+    }
