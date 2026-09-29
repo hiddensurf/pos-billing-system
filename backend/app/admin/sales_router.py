@@ -2,7 +2,7 @@ from decimal import Decimal
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlmodel import Session, select
-
+from pydantic import BaseModel
 from app.admin.sales_schemas import (
     SaleCreate,
     SaleItemRead,
@@ -28,7 +28,52 @@ router = APIRouter(
     tags=["Sales"],
 )
 
+class BillingProductRead(BaseModel):
+    id: int
+    name: str
+    sku: str
+    barcode: str | None
+    selling_price: Decimal
+    stock_quantity: int
+    unit: str
+@router.get(
+    "/products",
+    response_model=list[BillingProductRead],
+)
+def get_billing_products(
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+):
+    if current_user.role not in {"admin", "staff"}:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Insufficient permissions",
+        )
 
+    if not current_user.is_active:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Inactive user",
+        )
+
+    products = session.exec(
+        select(Product)
+        .where(Product.is_active == True)
+        .order_by(Product.name)
+    ).all()
+
+    return [
+        BillingProductRead(
+            id=product.id,
+            name=product.name,
+            sku=product.sku,
+            barcode=product.barcode,
+            selling_price=product.selling_price,
+            stock_quantity=product.stock_quantity,
+            unit=product.unit,
+        )
+        for product in products
+    ]  
 @router.post(
     "",
     response_model=SaleRead,

@@ -268,6 +268,22 @@ export async function getSales(token) {
 export async function getSale(token, saleId) {
   return request(`/sales/${saleId}`, { token })
 }
+export async function getBillingProducts(token) {
+  return request("/sales/products", {
+    token,
+  })
+}
+
+export async function createSale(token, saleData) {
+  return request("/sales", {
+    method: "POST",
+    token,
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(saleData),
+  })
+}
 export async function getLedger(token, params = {}) {
   const search = new URLSearchParams()
 
@@ -382,6 +398,8 @@ export default {
   getSupplierDues,
   getSales,
   getSale,
+  getBillingProducts,
+  createSale,
   createSaleReturn,
   getLedger,
   getLedgerSummary,
