@@ -12,6 +12,14 @@ import Products from "./pages/admin/Products"
 import AdminLayout from "./pages/admin/AdminLayout"
 import AdminDashboard from "./pages/admin/AdminDashboard"
 import Categories from "./pages/admin/Categories"
+import Suppliers from "./pages/admin/Suppliers"
+import Staff from "./pages/admin/Staff"
+import Purchases from "./pages/admin/Purchases"
+import SupplierPayments from "./pages/admin/SupplierPayments"
+import Sales from "./pages/admin/Sales"
+import Returns from "./pages/admin/Returns"
+import Ledger from "./pages/admin/Ledger"
+import Reports from "./pages/admin/Reports"
 function BillingPlaceholder() {
   return (
     <div className="min-h-screen flex items-center justify-center bg-slate-100">
@@ -80,42 +88,42 @@ function AppRoutes() {
 
           <Route
             path="suppliers"
-            element={<AdminDashboard />}
+            element={<Suppliers />}
           />
 
           <Route
             path="staff"
-            element={<AdminDashboard />}
+            element={<Staff />}
           />
 
           <Route
             path="purchases"
-            element={<AdminDashboard />}
+            element={<Purchases />}
           />
 
           <Route
             path="supplier-payments"
-            element={<AdminDashboard />}
+            element={<SupplierPayments />}
           />
 
           <Route
             path="sales"
-            element={<AdminDashboard />}
+            element={<Sales />}
           />
 
           <Route
             path="returns"
-            element={<AdminDashboard />}
+            element={<Returns />}
           />
 
           <Route
             path="ledger"
-            element={<AdminDashboard />}
+            element={<Ledger />}
           />
 
           <Route
             path="reports"
-            element={<AdminDashboard />}
+            element={<Reports />}
           />
         </Route>
       </Route>

@@ -1,25 +1,18 @@
-const stats = [
-  {
-    label: "Products",
-    value: "—",
-    description: "Total products",
-  },
-  {
-    label: "Stock Value",
-    value: "—",
-    description: "Current inventory value",
-  },
-  {
-    label: "Today's Sales",
-    value: "—",
-    description: "Sales recorded today",
-  },
-  {
-    label: "Pending Dues",
-    value: "—",
-    description: "Supplier payments pending",
-  },
-]
+import { useEffect, useState } from "react"
+import {
+  getProducts,
+  getSalesReport,
+  getSupplierDues,
+} from "../../api/client"
+import { useAuth } from "../../auth/AuthContext"
+
+function formatMoney(value) {
+  return `₹${Number(value || 0).toFixed(2)}`
+}
+
+function getToday() {
+  return new Date().toISOString().slice(0, 10)
+}
 
 const quickLinks = [
   {
@@ -45,6 +38,52 @@ const quickLinks = [
 ]
 
 export default function AdminDashboard() {
+  const { token } = useAuth()
+
+  const [products, setProducts] = useState([])
+  const [todaySales, setTodaySales] = useState(null)
+  const [supplierDues, setSupplierDues] = useState(null)
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState("")
+
+  async function loadDashboard() {
+    try {
+      setLoading(true)
+      setError("")
+
+      const today = getToday()
+
+      const [productData, salesData, duesData] = await Promise.all([
+        getProducts(token),
+        getSalesReport(token, {
+          from_date: today,
+          to_date: today,
+        }),
+        getSupplierDues(token, 2),
+      ])
+
+      setProducts(productData || [])
+      setTodaySales(salesData || null)
+      setSupplierDues(duesData || null)
+    } catch (err) {
+      setError(err.message || "Failed to load dashboard")
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  useEffect(() => {
+    loadDashboard()
+  }, [token])
+
+  const stockValue = products.reduce(
+    (total, product) =>
+      total +
+      Number(product.stock_quantity || 0) *
+        Number(product.cost_price || 0),
+    0,
+  )
+
   return (
     <div className="mx-auto max-w-7xl space-y-6">
       <div>
@@ -57,25 +96,68 @@ export default function AdminDashboard() {
         </p>
       </div>
 
+      {error && (
+        <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+          {error}
+        </div>
+      )}
+
       <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-        {stats.map((stat) => (
-          <div
-            key={stat.label}
-            className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm"
-          >
-            <p className="text-sm font-medium text-slate-500">
-              {stat.label}
-            </p>
+        <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
+          <p className="text-sm font-medium text-slate-500">
+            Products
+          </p>
+          <p className="mt-3 text-3xl font-bold text-slate-900">
+            {loading ? "—" : products.length}
+          </p>
+          <p className="mt-2 text-xs text-slate-500">
+            Total products
+          </p>
+        </div>
 
-            <p className="mt-3 text-3xl font-bold text-slate-900">
-              {stat.value}
-            </p>
+        <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
+          <p className="text-sm font-medium text-slate-500">
+            Stock Value
+          </p>
 
-            <p className="mt-2 text-xs text-slate-500">
-              {stat.description}
-            </p>
-          </div>
-        ))}
+          <p className="mt-3 text-3xl font-bold text-slate-900">
+            {loading ? "—" : formatMoney(stockValue)}
+          </p>
+
+          <p className="mt-2 text-xs text-slate-500">
+            Current inventory cost value
+          </p>
+        </div>
+
+        <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
+          <p className="text-sm font-medium text-slate-500">
+            Today's Sales
+          </p>
+
+          <p className="mt-3 text-3xl font-bold text-green-600">
+            {loading
+              ? "—"
+              : formatMoney(todaySales?.total_sales)}
+          </p>
+
+          <p className="mt-2 text-xs text-slate-500">
+            Sales recorded today
+          </p>
+        </div>
+
+        <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
+          <p className="text-sm font-medium text-slate-500">
+            Pending Dues
+          </p>
+          <p className="mt-3 text-3xl font-bold text-orange-600">
+            {loading
+              ? "—"
+              : formatMoney(supplierDues?.outstanding_amount)}
+          </p>
+          <p className="mt-2 text-xs text-slate-500">
+            Supplier #2 outstanding
+          </p>
+        </div>
       </section>
 
       <section>
