@@ -19,22 +19,10 @@ import SupplierPayments from "./pages/admin/SupplierPayments"
 import Sales from "./pages/admin/Sales"
 import Returns from "./pages/admin/Returns"
 import Ledger from "./pages/admin/Ledger"
+import Billing from "./pages/Billing"
 import Reports from "./pages/admin/Reports"
-function BillingPlaceholder() {
-  return (
-    <div className="min-h-screen flex items-center justify-center bg-slate-100">
-      <div className="rounded-xl bg-white p-8 shadow">
-        <h1 className="text-2xl font-bold">
-          Billing Portal
-        </h1>
-
-        <p className="mt-2 text-slate-500">
-          Billing portal coming next.
-        </p>
-      </div>
-    </div>
-  )
-}
+import MobileAdminLayout from "./pages/mobile/MobileAdminLayout"
+import MobileLogin from "./pages/mobile/MobileLogin"
 
 function Unauthorized() {
   return (
@@ -61,11 +49,19 @@ function AdminRoutes() {
 function AppRoutes() {
   return (
     <Routes>
+      {/* Desktop Login */}
       <Route
         path="/login"
         element={<Login />}
       />
 
+      {/* Mobile Admin Login */}
+      <Route
+        path="/m/login"
+        element={<MobileLogin />}
+      />
+
+      {/* Desktop Admin Portal */}
       <Route element={<AdminRoutes />}>
         <Route
           path="/admin"
@@ -128,24 +124,90 @@ function AppRoutes() {
         </Route>
       </Route>
 
+      {/* Mobile Admin Portal */}
+      <Route element={<AdminRoutes />}>
+        <Route
+          path="/m"
+          element={<MobileAdminLayout />}
+        >
+          <Route
+            index
+            element={<AdminDashboard />}
+          />
+
+          <Route
+            path="products"
+            element={<Products />}
+          />
+
+          <Route
+            path="categories"
+            element={<Categories />}
+          />
+
+          <Route
+            path="suppliers"
+            element={<Suppliers />}
+          />
+
+          <Route
+            path="staff"
+            element={<Staff />}
+          />
+
+          <Route
+            path="purchases"
+            element={<Purchases />}
+          />
+
+          <Route
+            path="supplier-payments"
+            element={<SupplierPayments />}
+          />
+
+          <Route
+            path="sales"
+            element={<Sales />}
+          />
+
+          <Route
+            path="returns"
+            element={<Returns />}
+          />
+
+          <Route
+            path="ledger"
+            element={<Ledger />}
+          />
+
+          <Route
+            path="reports"
+            element={<Reports />}
+          />
+        </Route>
+      </Route>
+
+      {/* Billing Portal */}
       <Route
         element={
           <ProtectedRoute
-            allowedRoles={["admin", "staff"]}
+            allowedRoles={["staff"]}
           />
         }
       >
         <Route
           path="/billing"
-          element={<BillingPlaceholder />}
+          element={<Billing />}
         />
       </Route>
 
+      {/* Unauthorized */}
       <Route
         path="/unauthorized"
         element={<Unauthorized />}
       />
 
+      {/* Catch-all */}
       <Route
         path="*"
         element={<Navigate to="/login" replace />}
