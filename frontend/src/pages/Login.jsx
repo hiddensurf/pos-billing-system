@@ -129,19 +129,7 @@ export default function Login() {
           </button>
         </form>
 
-        <div className="mt-6 rounded-lg bg-slate-50 p-4 text-sm text-slate-600">
-          <p className="font-medium text-slate-700">
-            Test accounts
-          </p>
 
-          <p className="mt-2">
-            Admin: <code>admin / admin123</code>
-          </p>
-
-          <p>
-            Staff: <code>staff1 / staff123</code>
-          </p>
-        </div>
       </div>
     </div>
   )
