@@ -120,6 +120,21 @@ Staff users have access to the Billing Portal and staff-appropriate transaction 
 ```text
 Username: admin
 Password: admin123
+```
+
+### Staff
+
+```text
+Username: staff1
+Password: staff123
+```
+
+### Demo limitations
+
+- The Render backend may take about 30-60 seconds to wake after inactivity.
+- Cash, Card and UPI record a payment method; no bank or payment gateway is charged.
+- Demo data is shared and can change during testing. These are public demo accounts, not production credentials.
+- Mobile tables may scroll horizontally on narrow screens.
 
 ## Architecture
 

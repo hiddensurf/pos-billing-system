@@ -1,8 +1,10 @@
+import { loadDashboardData } from "./dashboardData"
+import { useLocation } from "react-router-dom"
 import { useEffect, useState } from "react"
 import {
   getProducts,
   getSalesReport,
-  getSupplierDues,
+  getSupplierDuesSummary,
 } from "../../api/client"
 import { useAuth } from "../../auth/AuthContext"
 
@@ -39,6 +41,8 @@ const quickLinks = [
 
 export default function AdminDashboard() {
   const { token } = useAuth()
+  const { pathname } = useLocation()
+  const routeBase = pathname.startsWith("/m") ? "/m" : "/admin"
 
   const [products, setProducts] = useState([])
   const [todaySales, setTodaySales] = useState(null)
@@ -53,18 +57,15 @@ export default function AdminDashboard() {
 
       const today = getToday()
 
-      const [productData, salesData, duesData] = await Promise.all([
+      const data = await loadDashboardData([
         getProducts(token),
-        getSalesReport(token, {
-          from_date: today,
-          to_date: today,
-        }),
-        getSupplierDues(token, 2),
+        getSalesReport(token, { from_date: today, to_date: today }),
+        getSupplierDuesSummary(token),
       ])
-
-      setProducts(productData || [])
-      setTodaySales(salesData || null)
-      setSupplierDues(duesData || null)
+      if (data.products !== null) setProducts(data.products || [])
+      if (data.sales !== null) setTodaySales(data.sales || null)
+      if (data.dues !== null) setSupplierDues(data.dues || null)
+      if (data.hasErrors) setError("Some dashboard data could not be loaded. Other cards remain available.")
     } catch (err) {
       setError(err.message || "Failed to load dashboard")
     } finally {
@@ -155,7 +156,7 @@ export default function AdminDashboard() {
               : formatMoney(supplierDues?.outstanding_amount)}
           </p>
           <p className="mt-2 text-xs text-slate-500">
-            Supplier #2 outstanding
+            All suppliers outstanding
           </p>
         </div>
       </section>
@@ -175,7 +176,7 @@ export default function AdminDashboard() {
           {quickLinks.map((item) => (
             <a
               key={item.path}
-              href={item.path}
+              href={item.path.replace("/admin", routeBase)}
               className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm transition hover:-translate-y-0.5 hover:shadow-md"
             >
               <h3 className="font-semibold text-slate-900">

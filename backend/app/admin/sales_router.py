@@ -1,4 +1,4 @@
-from decimal import Decimal
+from decimal import Decimal, ROUND_HALF_UP
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlmodel import Session, select
@@ -102,6 +102,10 @@ def create_sale(
             detail="Discount cannot be negative",
         )
 
+    product_ids = [item.product_id for item in sale_data.items]
+    if len(product_ids) != len(set(product_ids)):
+        raise HTTPException(status_code=400, detail="Duplicate product lines are not allowed")
+
     prepared_items = []
     subtotal = Decimal("0.00")
 
@@ -160,13 +164,15 @@ def create_sale(
             )
         )
 
-    if sale_data.discount > subtotal:
+    item_discount_total = sum((item.discount for item in sale_data.items), Decimal("0.00"))
+
+    if sale_data.discount + item_discount_total > subtotal:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Sale discount cannot exceed subtotal",
         )
 
-    total_amount = subtotal - sale_data.discount
+    total_amount = subtotal - item_discount_total - sale_data.discount
 
     if total_amount <= 0:
         raise HTTPException(
@@ -480,6 +486,25 @@ def create_sale_return(
         for item in sale_items
     }
 
+    return_ids = [item.sale_item_id for item in return_data.items]
+    if len(return_ids) != len(set(return_ids)):
+        raise HTTPException(status_code=400, detail="Duplicate return lines are not allowed")
+
+    # Allocate the amount actually charged across sale items in integer cents.
+    # Largest remainders distribute rounding cents deterministically, so a full
+    # return refunds exactly the sale total, even across separate partial returns.
+    cent = Decimal("0.01")
+    weights = [item.unit_price * item.quantity - item.discount for item in sale_items]
+    weight_total = sum(weights, Decimal("0.00"))
+    total_cents = int((sale.total_amount / cent).to_integral_value(rounding=ROUND_HALF_UP))
+    raw = [Decimal(total_cents) * w / weight_total for w in weights]
+    allocated = [int(value) for value in raw]
+    remainder = total_cents - sum(allocated)
+    order = sorted(range(len(sale_items)), key=lambda i: (raw[i] - allocated[i], -sale_items[i].id), reverse=True)
+    for i in order[:remainder]:
+        allocated[i] += 1
+    refundable_cents = {item.id: allocated[i] for i, item in enumerate(sale_items)}
+
     prepared_items = []
     refund_amount = Decimal("0.00")
 
@@ -521,20 +546,14 @@ def create_sale_return(
                 ),
             )
 
-        item_refund = (
-            sale_item.unit_price * return_item.quantity
-        )
-
-        if sale_item.quantity > 0:
-            item_discount = (
-                sale_item.discount
-                * Decimal(return_item.quantity)
-                / Decimal(sale_item.quantity)
-            )
-        else:
-            item_discount = Decimal("0.00")
-
-        item_refund -= item_discount
+        # Use cumulative rounding and subtract prior refunds. The last unit
+        # receives any residual cent; repeated partial returns cannot over-refund.
+        cumulative_qty = returned_quantity + return_item.quantity
+        cumulative_cents = int((Decimal(refundable_cents[sale_item.id]) * cumulative_qty / sale_item.quantity).to_integral_value(rounding=ROUND_HALF_UP))
+        refunded_before = sum((item.refund_amount for item in previous_returns), Decimal("0.00"))
+        item_refund = Decimal(cumulative_cents) * cent - refunded_before
+        if item_refund < 0:
+            raise HTTPException(status_code=409, detail="Existing refunds exceed the refundable balance")
 
         prepared_items.append(
             (

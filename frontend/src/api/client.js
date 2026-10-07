@@ -407,3 +407,7 @@ export default {
   getSalesReport,
   getStockReport,
 }
+
+export async function getSupplierDuesSummary(token) {
+  return request("/admin/supplier-payments/summary", { token })
+}

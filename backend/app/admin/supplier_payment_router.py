@@ -218,6 +218,18 @@ def get_supplier_payments(
         for payment in payments
     ]
 
+@router.get("/summary")
+def supplier_dues_summary(
+    session: Session = Depends(get_session),
+    _: User = Depends(require_role("admin")),
+):
+    suppliers = session.exec(select(Supplier)).all()
+    total = Decimal("0.00")
+    for supplier in suppliers:
+        dues = get_supplier_dues(supplier.id, session, _)
+        total += dues.outstanding_amount
+    return {"outstanding_amount": total, "supplier_count": len(suppliers)}
+
 @router.get(
     "/supplier/{supplier_id}/dues",
     response_model=SupplierDueRead,
